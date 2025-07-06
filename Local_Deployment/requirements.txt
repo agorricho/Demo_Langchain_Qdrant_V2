@@ -1,0 +1,10 @@
+llama-index-core
+llama-index-llms-openai
+llama-index-agent-openai
+llama-index-embeddings-fastembed
+fastembed
+qdrant-client
+tqdm
+python-dotenv
+pprintpp
+pymupdf

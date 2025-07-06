@@ -1,0 +1,55 @@
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream ollama_backend {
+        # least_conn;
+        ${NGINX_OLLAMA_BACKEND_LIST}
+        
+        #server ollama1:11434;
+        #s erver ollama2:11434;
+        # server ollama3:11434;
+        # server ollama4:11434;
+    }
+
+    # map $http_api_key $valid_api_key {
+    #     default 0;
+    #     "${OLLAMA_API_KEY}" 1;  # Replace with your actual API key
+    # }
+
+    
+    server {
+        # listen ${OLLAMA_PROXY_PORT};
+        listen 80;
+
+        # location / {
+        #     root /apt/www;
+        # }
+
+        location / {
+        #     # if ($valid_api_key = 0) {
+        #     #     return 403;  # Forbidden if API key is invalid
+        #     # }
+
+            proxy_pass http://ollama_backend;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        #     # proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        #     # proxy_set_header X-Forwarded-Proto $scheme;
+
+            # Enable streaming support
+            proxy_buffering off;
+            chunked_transfer_encoding on;
+
+        #     # # Additional headers to support streaming if needed
+        #     # proxy_set_header Connection '';
+        }
+    }
+}

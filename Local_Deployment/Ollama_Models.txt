@@ -1,0 +1,9 @@
+# List models that need to be pulled by Ollama, one model per line
+# names must be compliant with https://llama.com/library
+llama3.1
+command-r
+phi3
+llama3.2-vision
+llama3.2-vision:90b
+gemma3:27b
+
