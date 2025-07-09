@@ -1,0 +1,5 @@
+# After running retrieve(query)
+serialized, context = retrieve(question)
+top_nodes = [pt.payload for pt in context.points]  # or adapt as needed
+
+evaluator.load_your_nodes(top_nodes)
