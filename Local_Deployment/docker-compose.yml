@@ -1,7 +1,5 @@
-version: '3.3'
-
 services:
-  
+
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant-container
@@ -9,9 +7,35 @@ services:
       - "6333:6333"  # HTTP API
       - "6334:6334"  # gRPC API
     environment:
-      - QDRANT_API_KEY=api-key-123
+      # QDRANT_API_KEY read from .env file via ${QDRANT_API_KEY}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
     volumes:
       - ./qdrant_storage:/qdrant/storage
     restart: unless-stopped
 
-   
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-container
+    ports:
+      - "11434:11434"  # Ollama server API port
+    runtime: nvidia  # Enable NVIDIA GPU support
+    environment:
+      # NVIDIA_VISIBLE_DEVICES read from .env (e.g. "all" or "0")
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
+      # Path where Ollama models are stored, from .env
+      - OLLAMA_MODELS=${OLLAMA_MODELS}
+    volumes:
+      - ./ollama_models:${OLLAMA_MODELS}
+      - ./ollama_startup.sh:/usr/local/bin/ollama_startup.sh
+    entrypoint: ["/usr/local/bin/ollama_startup.sh"]
+    restart: unless-stopped
+
+# Notes:
+# - Make sure you have a `.env` file in the same directory with the variables:
+#    QDRANT_API_KEY=your_api_key_here
+#    NVIDIA_VISIBLE_DEVICES=all
+#    OLLAMA_MODELS=/root/.ollama
+#
+# - Docker Compose automatically loads the .env file and substitutes ${VAR} in this yml.
+# - Use `runtime: nvidia` only if you want GPU support and have Nvidia Docker set up.
+# - The ollama_startup.sh script should be executable and handle model loading/logging.
