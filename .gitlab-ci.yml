@@ -1,0 +1,136 @@
+variables:
+  GITLAB_USER_LOGIN: "$GITLAB_USER_LOGIN"
+  GITLAB_USER_EMAIL: "$GITLAB_USER_EMAIL"
+  GITLAB_USER_NAME: "$GITLAB_USER_NAME"
+  CI_RUNNER_TAGS: "$CI_RUNNER_TAGS"
+
+stages:
+  - build
+  - deploy
+  - test
+
+
+pre-build-gpu-job:
+  stage: build
+  tags:
+    - gpu
+  script:
+    - echo "Running on GPU-SERVER"
+    - pwd  # Print working directory
+    - ls -la  # List all files
+    - bash -x ./show_ci_environment.sh  # Run with debug mode
+    - printenv | sort
+
+
+pre-build-compute-job:
+  stage: build
+  tags:
+    - compute
+  script:
+    - echo "Running on COMPUTE-10"
+    - pwd
+    - ./show_ci_environment.sh
+    - printenv | sort
+
+
+sync-to-s3-job:
+  stage: build
+  tags:
+    - compute
+  variables:
+    DEST_S3_PATH: "${GITLAB_CLONE_S3_BUCKET}/arc-gitlab/${CI_PROJECT_PATH}"
+    ZIP_FILE: "${CI_COMMIT_BRANCH}.tar.gz"
+  script:
+    - TMP_DIR=$(mktemp -d)
+    - tar zcf "${TMP_DIR}/${ZIP_FILE}" .
+    - aws s3 cp "${TMP_DIR}/${ZIP_FILE}" "s3://${DEST_S3_PATH}/${ZIP_FILE}"
+    - aws s3 presign "s3://${DEST_S3_PATH}/${ZIP_FILE}" --expires-in 14400 > ./AWS_presigned_URL.txt
+    - cat ./AWS_presigned_URL.txt
+    - if [ -n "$TMP_DIR" ]; then rm -rf "$TMP_DIR"; else echo "No tempdir to delete."; fi
+    - RECIPIENTS=$(cat $TEAM_EMAILS_JSON | jq -r ".${GITLAB_USER_LOGIN}")
+    - echo "Sending notification to $RECIPIENTS"
+    - echo "Your repo ${CI_PROJECT_PATH} has been synced to s3://${DEST_S3_PATH}/${ZIP_FILE}" > .message.txt
+    - echo "Use this presigned URL within the next 4 hours:" >> .message.txt
+    - cat ./AWS_presigned_URL.txt >> .message.txt
+    - echo "Alternative format (remove blanks in URL)" >> .message.txt
+    - cat ./AWS_presigned_URL.txt | sed 's!https://!https :// !g' >> .message.txt
+    - echo 'Use ```curl URL | tar zxf -``` to extract files into the current directory.' >> .message.txt
+    - if [  "$RECIPIENTS" != "null" ]; then ./send_email.py "$RECIPIENTS" "Synced repo ${CI_PROJECT_PATH} to S3" .message.txt; fi
+    - echo "Done."
+  artifacts:
+    paths:
+      - ./AWS_presigned_URL.txt
+    untracked: false
+    when: on_success
+    access: all
+    expire_in: "4 hours"
+  
+
+
+
+deploy-gpu:
+  stage: deploy
+  tags:
+    - gpu
+  variables:
+    WORK_DIR: /staging/users/insight/agentic_ai
+  script:
+    - echo "This job deploys something from the $CI_COMMIT_BRANCH branch."
+    - source $OLLAMA_SHELL
+    - mkdir -p $WORK_DIR
+    - cp -r ./gpu_server/* $WORK_DIR/
+    - cd $WORK_DIR
+    - cat /dev/null > .env
+    - ./configure.sh $OLLAMA_SHELL
+    - ./launch.sh environment
+    - ./launch.sh stop
+    - ./launch.sh pull
+    - ./launch.sh start
+    - sleep 10
+    - ./launch.sh status
+    - ./launch.sh models
+    - echo "Deployment completed successfully"
+  only:
+    - main
+  environment: prod
+
+
+deploy-compute:
+  stage: deploy
+  tags:
+    - compute
+  variables:
+    WORK_DIR: /tau/local/agentic_ai
+  script:
+    - echo "This job deploys something from the $CI_COMMIT_BRANCH branch."
+    - source $OLLAMA_SHELL
+    - mkdir -p $WORK_DIR
+    - mkdir -p $WORK_DIR/log
+    - cp -r ./backend $WORK_DIR/
+    - cd $WORK_DIR/backend
+    - cat /dev/null > .env
+    - ./configure.sh
+    - podman-compose stop
+    - podman-compose pull
+    - podman-compose up -d
+    - sleep 10
+    - podman-compose ps
+    - echo "Deployment completed successfully"
+  only:
+    - main
+  environment: prod
+
+
+test-databases:
+  stage: test
+  tags:
+    - compute
+  script:
+    - echo "Testing database connections"
+    - cd ./backend
+    - ./configure.sh
+    - ./test/test_databases.sh
+  only:
+    - main
+  environment: prod
+
