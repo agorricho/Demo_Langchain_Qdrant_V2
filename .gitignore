@@ -1,2 +1,3 @@
 Local_Deployment/qdrant_storage/
+Local_Deployment/ollama_models/
 Local_Deployment/.env
